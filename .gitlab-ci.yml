@@ -1,0 +1,104 @@
+stages:
+  - build
+  - test
+  - scan
+  - sast
+  - dependency_scanning
+  - deploy
+  - dast
+  - rollback
+
+variables:
+  DOCKER_IMAGE: registry.example.com/your-image-name
+
+build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t $DOCKER_IMAGE app/
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $DOCKER_IMAGE
+  only:
+    - main
+
+test:
+  stage: test
+  image: python:3.9
+  script:
+    - pip install -r app/src/requirements.txt
+    - python -m unittest discover app/src/tests
+
+scan:
+  stage: scan
+  image: registry.access.redhat.com/ubi8/openscap
+  script:
+    - ./openscap/dockerfile_scan.sh
+
+sast:
+  stage: sast
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+    entrypoint: [""]
+  script:
+    - sonar-scanner -Dsonar.projectKey=your_project_key -Dsonar.sources=app/src -Dsonar.host.url=https://your_sonarqube_url -Dsonar.login=your_sonarqube_token
+  only:
+    - main
+
+dependency_scanning:
+  stage: dependency_scanning
+  image: python:3.9
+  script:
+    - pip install safety
+    - pip install -r app/src/requirements.txt
+    - safety check -r app/src/requirements.txt
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  image: hashicorp/terraform:1.1.2
+  before_script:
+    - apk add --no-cache curl jq
+    - VAULT_TOKEN=$(curl -s --request POST --data '{"password": "'${VAULT_PASS}'"}' http://<vault_address>:8200/v1/auth/userpass/login/<username> | jq -r '.auth.client_token')
+    - AWS_ACCESS_KEY_ID=$(curl -s --header "X-Vault-Token: $VAULT_TOKEN" http://<vault_address>:8200/v1/secret/data/aws_access_key | jq -r '.data.data.aws_access_key_id')
+    - AWS_SECRET_ACCESS_KEY=$(curl -s --header "X-Vault-Token: $VAULT_TOKEN" http://<vault_address>:8200/v1/secret/data/aws_access_key | jq -r '.data.data.aws_secret_access_key')
+  script:
+    - cd terraform
+    - terraform init
+    - terraform validate
+    - terraform state pull > backup.tfstate
+    - terraform plan -out=tfplan -input=false
+    - terraform apply -auto-approve -input=false tfplan
+  only:
+    - main
+  environment:
+    name: production
+    url: http://your-app-url
+  when: manual
+
+dast:
+  stage: dast
+  image: owasp/zap2docker-stable
+  script:
+    - export TARGET_URL=http://your-app-url
+    - zap-api-scan.py -t $TARGET_URL/api/v1/ -f openapi -u https://raw.githubusercontent.com/zaproxy/zaproxy/master/zap/src/main/dist/scripts/templates/authentication/Login%20Script.js.template -c "username=<your_username>&password=<your_password>&csrfTokenName=<your_csrf_token_name>&loginUrl=<your_login_url>&loginRequestData=<your_login_request_data>"
+    - zap-cli report -o zap_report.html -f html
+  artifacts:
+    paths:
+      - zap_report.html
+  only:
+    - main
+
+rollback:
+  stage: deploy
+  image: hashicorp/terraform:1.1.2
+  script:
+    - cd terraform
+    - terraform init
+    - terraform state push backup.tfstate
+  when: manual
+  environment:
+    name: production
+    action: stop
