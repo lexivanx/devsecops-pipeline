@@ -1,0 +1,22 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+*.log
+
+# Docker
+*.log
+*.sock
