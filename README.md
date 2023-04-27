@@ -47,7 +47,8 @@ This project demonstrates the implementation of a DevSecOps pipeline using GitLa
 4. Configure the OpenSCAP scanning policy in the `openscap/` directory.
 5. Set up a SonarQube server and configure a project for your application.
 6. Deploy and configure Prometheus and Grafana for monitoring and alerting.
-7. Push your changes to the GitLab project, which will trigger the CI/CD pipeline. Monitor the pipeline execution in GitLab and review the logs to ensure all stages are successful and that security scans and compliance checks are being performed as expected.
+7. Push your changes to the GitLab project, which will trigger the CI/CD pipeline. 
+8. Monitor the pipeline execution in GitLab and review the logs to ensure all stages are successful and that security scans and compliance checks are being performed as expected.
 
 ## Contributing
 
